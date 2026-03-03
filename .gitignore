@@ -1,0 +1,98 @@
+# ===============================
+# Miscellaneous
+# ===============================
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# ===============================
+# IntelliJ / IDE
+# ===============================
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+
+# ===============================
+# Flutter / Dart / Pub
+# ===============================
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# ===============================
+# Windows Flutter
+# ===============================
+windows/flutter/ephemeral/
+
+# ===============================
+# Android build artifacts
+# ===============================
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ===============================
+# Symbolication
+# ===============================
+app.*.symbols
+
+# ===============================
+# Obfuscation
+# ===============================
+app.*.map.json
+
+# ===============================
+# Local Project Files (IMPORTANT)
+# ===============================
+
+# Persistent local memory
+memory.json
+
+# Local config files
+.env
+.env.*
+
+# Logs
+*.log
+
+# ===============================
+# AI Models (VERY IMPORTANT)
+# ===============================
+*.gguf
+*.bin
+*.pt
+*.pth
+*.ckpt
+
+# ===============================
+# Executables / Binaries
+# ===============================
+*.exe
+*.dll
+*.so
+*.dylib
+
+# ===============================
+# llama.cpp / whisper build folders
+# ===============================
+models/
+llama.cpp/
+whisper.cpp/
+build/
