@@ -104,3 +104,5 @@ node_modules/
 dist/
 dist-electron/
 out/
+.vite/
+.eslintcache
