@@ -11,6 +11,8 @@ dependencies:
   http: ^1.2.0
   flutter_markdown: ^0.7.7+1
   just_audio: ^0.9.36
+  google_fonts: ^8.1.0
+  flutter_animate: ^4.5.2
 
 dev_dependencies:
   flutter_test:

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'memory_service.dart';
 
 void main() {
@@ -14,12 +16,13 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Offline Local LLM',
+      title: 'LocalHost-AI Workspace',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF0E0E0E),
+        scaffoldBackgroundColor: const Color(0xFF0A0A0A),
+        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF141414),
+          backgroundColor: Colors.transparent,
           elevation: 0,
         ),
       ),
@@ -59,7 +62,6 @@ class _ChatPageState extends State<ChatPage> {
 
   /// UI STATE
   int selectedRailIndex = 0;
-  bool showSettings = false;
 
   /// METRICS
   int lastLatencyMs = 0;
@@ -83,12 +85,10 @@ class _ChatPageState extends State<ChatPage> {
     String modeInstruction;
     switch (selectedMode) {
       case "Reasoning":
-        modeInstruction =
-            "Think step by step and explain your reasoning clearly.";
+        modeInstruction = "Think step by step and explain your reasoning clearly.";
         break;
       case "Writing":
-        modeInstruction =
-            "Write a structured, well-formatted response using Markdown.";
+        modeInstruction = "Write a structured, well-formatted response using Markdown.";
         break;
       default:
         modeInstruction = "Give a short, direct, concise answer.";
@@ -136,40 +136,44 @@ Assistant:
       MemoryService.addMessage("user", userText);
     }
 
-    streamingEnabled
-        ? _streamResponse(userText)
-        : _instantResponse(userText);
+    streamingEnabled ? _streamResponse(userText) : _instantResponse(userText);
   }
 
   /// INSTANT RESPONSE
   Future<void> _instantResponse(String userText) async {
     final start = DateTime.now();
 
-    final response = await http.post(
-      Uri.parse('http://127.0.0.1:8080/completion'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'prompt': buildPrompt(userText),
-        'n_predict': tokenBudget[selectedMode],
-        'temperature': selectedMode == "Reasoning" ? 0.5 : 0.7,
-        'stop': ['User:', 'Assistant:'],
-        'stream': false,
-      }),
-    );
+    try {
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1:8080/completion'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'prompt': buildPrompt(userText),
+          'n_predict': tokenBudget[selectedMode],
+          'temperature': selectedMode == "Reasoning" ? 0.5 : 0.7,
+          'stop': ['User:', 'Assistant:'],
+          'stream': false,
+        }),
+      );
 
-    final data = jsonDecode(response.body);
-    final reply = (data['content'] ?? '').trim();
+      final data = jsonDecode(response.body);
+      final reply = (data['content'] ?? '').trim();
 
-    setState(() {
-      messages.last.content = reply;
-      loading = false;
-      lastLatencyMs =
-          DateTime.now().difference(start).inMilliseconds;
-      lastCharCount = reply.length;
-    });
+      setState(() {
+        messages.last.content = reply;
+        loading = false;
+        lastLatencyMs = DateTime.now().difference(start).inMilliseconds;
+        lastCharCount = reply.length;
+      });
 
-    if (memoryEnabled) {
-      MemoryService.addMessage("assistant", reply);
+      if (memoryEnabled) {
+        MemoryService.addMessage("assistant", reply);
+      }
+    } catch (e) {
+      setState(() {
+        messages.last.content = "Error connecting to local LLM.";
+        loading = false;
+      });
     }
 
     _autoScroll();
@@ -179,66 +183,71 @@ Assistant:
   Future<void> _streamResponse(String userText) async {
     final start = DateTime.now();
 
-    final request = http.Request(
-      'POST',
-      Uri.parse('http://127.0.0.1:8080/completion'),
-    );
+    try {
+      final request = http.Request(
+        'POST',
+        Uri.parse('http://127.0.0.1:8080/completion'),
+      );
 
-    request.headers['Content-Type'] = 'application/json';
-    request.body = jsonEncode({
-      'prompt': buildPrompt(userText),
-      'n_predict': tokenBudget[selectedMode],
-      'temperature': selectedMode == "Reasoning" ? 0.5 : 0.7,
-      'stop': ['User:', 'Assistant:'],
-      'stream': true,
-    });
+      request.headers['Content-Type'] = 'application/json';
+      request.body = jsonEncode({
+        'prompt': buildPrompt(userText),
+        'n_predict': tokenBudget[selectedMode],
+        'temperature': selectedMode == "Reasoning" ? 0.5 : 0.7,
+        'stop': ['User:', 'Assistant:'],
+        'stream': true,
+      });
 
-    final streamedResponse = await request.send();
+      final streamedResponse = await request.send();
 
-    String buffer = "";
-    String fullText = "";
-    DateTime lastUpdate = DateTime.now();
+      String buffer = "";
+      String fullText = "";
+      DateTime lastUpdate = DateTime.now();
 
-    await for (final chunk in streamedResponse.stream.transform(utf8.decoder)) {
-      final lines = chunk.split('\n');
+      await for (final chunk in streamedResponse.stream.transform(utf8.decoder)) {
+        final lines = chunk.split('\n');
 
-      for (final line in lines) {
-        if (!line.startsWith('data:')) continue;
-        if (line.contains('[DONE]')) break;
+        for (final line in lines) {
+          if (!line.startsWith('data:')) continue;
+          if (line.contains('[DONE]')) break;
 
-        final jsonPart =
-            jsonDecode(line.replaceFirst('data:', '').trim());
-        final token = jsonPart['content'] ?? '';
+          final jsonPart = jsonDecode(line.replaceFirst('data:', '').trim());
+          final token = jsonPart['content'] ?? '';
 
-        buffer += token;
-        fullText += token;
+          buffer += token;
+          fullText += token;
 
-        if (DateTime.now().difference(lastUpdate).inMilliseconds > 60) {
-          setState(() {
-            messages.last.content += buffer;
-            buffer = "";
-            lastUpdate = DateTime.now();
-          });
-          _autoScroll();
+          if (DateTime.now().difference(lastUpdate).inMilliseconds > 60) {
+            setState(() {
+              messages.last.content += buffer;
+              buffer = "";
+              lastUpdate = DateTime.now();
+            });
+            _autoScroll();
+          }
         }
       }
-    }
 
-    if (buffer.isNotEmpty) {
+      if (buffer.isNotEmpty) {
+        setState(() {
+          messages.last.content += buffer;
+        });
+      }
+
       setState(() {
-        messages.last.content += buffer;
+        loading = false;
+        lastLatencyMs = DateTime.now().difference(start).inMilliseconds;
+        lastCharCount = fullText.length;
       });
-    }
 
-    setState(() {
-      loading = false;
-      lastLatencyMs =
-          DateTime.now().difference(start).inMilliseconds;
-      lastCharCount = fullText.length;
-    });
-
-    if (memoryEnabled) {
-      MemoryService.addMessage("assistant", fullText.trim());
+      if (memoryEnabled) {
+        MemoryService.addMessage("assistant", fullText.trim());
+      }
+    } catch (e) {
+      setState(() {
+        messages.last.content = "Error connecting to local LLM.";
+        loading = false;
+      });
     }
 
     _autoScroll();
@@ -266,54 +275,115 @@ Assistant:
     });
   }
 
-  /// CLEAR MEMORY
-  void _clearMemory() {
-    MemoryService.clearMemory();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Memory cleared")),
-    );
-  }
-
   /// SETTINGS DIALOG
   void _openSettings() {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A1A),
-        title: const Text("Settings"),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFF333333))),
+        title: Text("Workspace Settings",
+            style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             SwitchListTile(
+              activeColor: const Color(0xFF00E676),
               title: const Text("Streaming Responses"),
               value: streamingEnabled,
               onChanged: (v) => setState(() => streamingEnabled = v),
             ),
             SwitchListTile(
-              title: const Text("Memory"),
+              activeColor: const Color(0xFF00E676),
+              title: const Text("Context Memory"),
               value: memoryEnabled,
               onChanged: (v) {
                 setState(() => memoryEnabled = v);
                 MemoryService.setEnabled(v);
               },
             ),
+            const SizedBox(height: 16),
             DropdownButtonFormField<String>(
+              dropdownColor: const Color(0xFF262626),
               initialValue: selectedMode,
-              decoration: const InputDecoration(labelText: "Mode"),
+              decoration: const InputDecoration(
+                labelText: "Inference Mode",
+                border: OutlineInputBorder(),
+                focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFF00E676))),
+              ),
               items: modes
-                  .map((m) =>
-                      DropdownMenuItem(value: m, child: Text(m)))
+                  .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                   .toList(),
               onChanged: (v) => setState(() => selectedMode = v!),
             ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () {
+                MemoryService.clearMemory();
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Memory cleared successfully."),
+                    backgroundColor: Color(0xFF262626),
+                  ),
+                );
+              },
+              child: const Text("Clear Global Memory",
+                  style: TextStyle(color: Colors.redAccent)),
+            )
           ],
         ),
         actions: [
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00E676),
+              foregroundColor: const Color(0xFF003918),
+            ),
             onPressed: () => Navigator.pop(context),
-            child: const Text("Close"),
+            child: const Text("Done"),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarItem(int index, IconData icon, String label) {
+    final isActive = selectedRailIndex == index;
+    return InkWell(
+      onTap: () {
+        setState(() => selectedRailIndex = index);
+        if (index == 1) _newChat();
+        if (index == 2) _openSettings();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(
+              color: isActive ? const Color(0xFF00E676) : Colors.transparent,
+              width: 3,
+            ),
+          ),
+          color: isActive ? const Color(0xFF00E676).withOpacity(0.05) : Colors.transparent,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isActive ? const Color(0xFF00E676) : Colors.white70, size: 20),
+            const SizedBox(width: 16),
+            Text(
+              label.toUpperCase(),
+              style: GoogleFonts.jetBrainsMono(
+                color: isActive ? const Color(0xFF00E676) : Colors.white70,
+                fontSize: 12,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                letterSpacing: 1.1,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -323,135 +393,233 @@ Assistant:
     return Scaffold(
       body: Row(
         children: [
-          NavigationRail(
-            backgroundColor: const Color(0xFF141414),
-            selectedIndex: selectedRailIndex,
-            onDestinationSelected: (i) {
-              setState(() => selectedRailIndex = i);
-              if (i == 1) _newChat();
-              if (i == 2) _openSettings();
-            },
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.chat),
-                label: Text("Chat"),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.history),
-                label: Text("New"),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.settings),
-                label: Text("Settings"),
-              ),
-            ],
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(
+          // FIXED SIDEBAR (280px)
+          Container(
+            width: 280,
+            decoration: const BoxDecoration(
+              color: Color(0xFF1A1A1A),
+              border: Border(right: BorderSide(color: Color(0xFF333333))),
+            ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppBar(
-                  title: const Text("Offline Personal AI"),
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: _clearMemory,
-                    ),
-                  ],
-                ),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(6),
-                  color: Colors.black26,
-                  child: const Text(
-                    "🛜 Local LLM · llama.cpp · CPU/GPU Optional",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: Colors.greenAccent),
-                  ),
-                ),
-                if (!loading && lastLatencyMs > 0)
-                  Padding(
-                    padding: const EdgeInsets.all(6),
-                    child: Text(
-                      "⚡ ${lastLatencyMs}ms | ✍ $lastCharCount chars | 🔢 ${tokenBudget[selectedMode]} tokens",
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.greenAccent),
-                    ),
-                  ),
-                Expanded(
-                  child: ListView.builder(
-                    controller: _scrollController,
-                    itemCount: messages.length,
-                    itemBuilder: (_, i) {
-                      final msg = messages[i];
-                      return Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: msg.role == "user"
-                            ? Align(
-                                alignment: Alignment.centerRight,
-                                child: Container(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 600),
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blueGrey.shade700,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(msg.content),
-                                ),
-                              )
-                            : Align(
-                                alignment: Alignment.centerLeft,
-                                child: Container(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 600),
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade900,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: MarkdownBody(
-                                    data: msg.content,
-                                    selectable: true,
-                                  ),
-                                ),
-                              ),
-                      );
-                    },
-                  ),
-                ),
-                if (loading)
-                  const Padding(
-                    padding: EdgeInsets.all(8),
-                    child: LinearProgressIndicator(),
-                  ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  color: const Color(0xFF141414),
-                  child: Row(
+                Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _controller,
-                          minLines: 1,
-                          maxLines: 4,
-                          decoration: const InputDecoration(
-                            hintText: "Type a message…",
-                            border: OutlineInputBorder(),
-                          ),
-                          onSubmitted: (_) => sendPrompt(),
+                      Text(
+                        "LocalHost-AI",
+                        style: GoogleFonts.inter(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.send),
-                        onPressed: sendPrompt,
+                      const SizedBox(height: 4),
+                      Text(
+                        "OFFLINE WORKSPACE",
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          color: Colors.white54,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildSidebarItem(0, Icons.terminal, "Workspace"),
+                _buildSidebarItem(1, Icons.add_box_outlined, "New Session"),
+                _buildSidebarItem(2, Icons.tune, "Parameters"),
+                const Spacer(),
+                
+                // INFERENCE STATUS (Animated)
+                Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: loading ? const Color(0xFF00E676) : Colors.white24,
+                          shape: BoxShape.circle,
+                        ),
+                      )
+                          .animate(
+                            target: loading ? 1 : 0,
+                            onPlay: (controller) => controller.repeat(reverse: true),
+                          )
+                          .fade(duration: 800.ms, begin: 0.2, end: 1.0)
+                          .scale(begin: const Offset(0.8, 0.8), end: const Offset(1.2, 1.2)),
+                      const SizedBox(width: 12),
+                      Text(
+                        loading ? "INFERENCE ACTIVE" : "IDLE",
+                        style: GoogleFonts.jetBrainsMono(
+                          color: loading ? const Color(0xFF00E676) : Colors.white54,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
                 ),
               ],
+            ),
+          ),
+          
+          // CENTRAL WORKSPACE
+          Expanded(
+            child: Center(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: Column(
+                  children: [
+                    // TOP BAR / METRICS
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            selectedMode,
+                            style: GoogleFonts.inter(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          if (!loading && lastLatencyMs > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A1A1A),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFF333333)),
+                              ),
+                              child: Text(
+                                "\$ L:$lastLatencyMs ms | C:$lastCharCount | T:${tokenBudget[selectedMode]}",
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 12,
+                                  color: Colors.white70,
+                                ),
+                              ).animate().fadeIn(duration: 400.ms),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    // CHAT HISTORY
+                    Expanded(
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        itemCount: messages.length,
+                        itemBuilder: (_, i) {
+                          final msg = messages[i];
+                          final isUser = msg.role == "user";
+                          
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: Align(
+                              alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                constraints: const BoxConstraints(maxWidth: 750),
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: isUser ? Colors.transparent : const Color(0xFF262626),
+                                  border: isUser ? Border.all(color: const Color(0xFF333333)) : null,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: isUser
+                                    ? Text(
+                                        msg.content,
+                                        style: GoogleFonts.inter(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          height: 1.5,
+                                        ),
+                                      )
+                                    : MarkdownBody(
+                                        data: msg.content.isEmpty ? "..." : msg.content,
+                                        selectable: true,
+                                        styleSheet: MarkdownStyleSheet(
+                                          p: GoogleFonts.inter(color: const Color(0xFFE5E2E1), fontSize: 16, height: 1.6),
+                                          code: GoogleFonts.jetBrainsMono(color: const Color(0xFF75FF9E), backgroundColor: Colors.transparent),
+                                          codeblockDecoration: BoxDecoration(
+                                            color: const Color(0xFF131313),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: const Color(0xFF333333))
+                                          ),
+                                          a: GoogleFonts.inter(color: const Color(0xFF00E676)),
+                                        ),
+                                      ),
+                              ),
+                            ).animate().slideY(begin: 0.1, end: 0, duration: 400.ms, curve: Curves.easeOutCubic).fadeIn(duration: 300.ms),
+                          );
+                        },
+                      ),
+                    ),
+
+                    // FLOATING INPUT DOCK
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(32, 0, 32, 32),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A1A),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFF333333)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.4),
+                            blurRadius: 32,
+                            offset: const Offset(0, 12),
+                          )
+                        ]
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _controller,
+                              minLines: 1,
+                              maxLines: 6,
+                              style: GoogleFonts.inter(color: Colors.white, fontSize: 16),
+                              decoration: InputDecoration(
+                                hintText: "Enter prompt...",
+                                hintStyle: GoogleFonts.inter(color: Colors.white38),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.all(20),
+                              ),
+                              onSubmitted: (_) => sendPrompt(),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: InkWell(
+                              onTap: loading ? null : sendPrompt,
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: loading ? const Color(0xFF333333) : const Color(0xFF00E676),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  Icons.arrow_upward_rounded,
+                                  color: loading ? Colors.white38 : const Color(0xFF003918),
+                                ),
+                              ),
+                            ),
+                          )
+                        ],
+                      ),
+                    ).animate().slideY(begin: 1.0, end: 0.0, duration: 600.ms, curve: Curves.easeOutCirc),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
