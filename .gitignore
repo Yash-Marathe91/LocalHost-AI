@@ -96,3 +96,11 @@ models/
 llama.cpp/
 whisper.cpp/
 build/
+
+# ===============================
+# Web / Electron Projects (React)
+# ===============================
+node_modules/
+dist/
+dist-electron/
+out/
