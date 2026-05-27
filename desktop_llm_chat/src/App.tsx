@@ -4,12 +4,10 @@ import {
   Terminal, PlusSquare, SlidersHorizontal, ArrowUp, Trash2,
   Copy, Check, X, Cpu, ToggleLeft, ToggleRight, Download
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
 
 import { MemoryService } from './memory';
+import TypewriterContent from './TypewriterContent';
 import { MODE_CONFIG, buildPrompt } from './config';
 import type { InferenceMode, Message } from './config';
 
@@ -26,6 +24,7 @@ function App() {
   const [lastCharCount, setLastCharCount] = useState(0);
   const [totalInferences, setTotalInferences] = useState(0);
   const [sidebarTab, setSidebarTab] = useState(0);
+  const [animatedMsgs, setAnimatedMsgs] = useState<Set<number>>(new Set());
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -76,7 +75,7 @@ function App() {
           prompt,
           n_predict: config.tokens,
           temperature: config.temperature,
-          stop: ['User:', 'Assistant:'],
+          stop: ['<|eot_id|>', '<|start_header_id|>', 'User:', 'Assistant:'],
           stream: false,
         }),
       });
@@ -109,13 +108,14 @@ function App() {
           prompt,
           n_predict: config.tokens,
           temperature: config.temperature,
-          stop: ['User:', 'Assistant:'],
+          stop: ['<|eot_id|>', '<|start_header_id|>', 'User:', 'Assistant:'],
           stream: true,
         }),
       });
 
       const assistantMsg: Message = { role: 'assistant', content: '', timestamp: Date.now() };
       setMessages(prev => [...prev, assistantMsg]);
+      setAnimatedMsgs(prev => new Set(prev).add(assistantMsg.timestamp));
       const msgIdx = messages.length + 1;
 
       const reader = res.body?.getReader();
@@ -170,7 +170,7 @@ function App() {
     setTimeout(() => setCopiedIdx(null), 2000);
   };
 
-  const newChat = () => { setMessages([]); setLastLatencyMs(0); setLastCharCount(0); };
+  const newChat = () => { setMessages([]); setLastLatencyMs(0); setLastCharCount(0); setAnimatedMsgs(new Set()); };
   const clearMemory = () => { MemoryService.clear(); };
 
   const exportChat = () => {
@@ -350,28 +350,11 @@ function App() {
                       {isUser ? (
                         <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                       ) : (
-                        <div className="prose prose-invert prose-sm max-w-none">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}
-                            components={{
-                              code({ className, children, ...props }) {
-                                const match = /language-(\w+)/.exec(className || '');
-                                const codeStr = String(children).replace(/\n$/, '');
-                                return match ? (
-                                  <SyntaxHighlighter style={oneDark} language={match[1]} PreTag="div"
-                                    customStyle={{ background: '#131313', borderRadius: '8px', border: '1px solid #333', fontSize: '13px' }}>
-                                    {codeStr}
-                                  </SyntaxHighlighter>
-                                ) : (
-                                  <code className="bg-[#131313] text-[#75ff9e] px-1.5 py-0.5 rounded font-mono text-[13px]" {...props}>{children}</code>
-                                );
-                              },
-                              a({ children, ...props }) {
-                                return <a className="text-[#00E676] hover:underline" {...props}>{children}</a>;
-                              }
-                            }}>
-                            {msg.content || '...'}
-                          </ReactMarkdown>
-                        </div>
+                        <TypewriterContent
+                          text={msg.content || '...'}
+                          animate={!animatedMsgs.has(msg.timestamp)}
+                          onComplete={() => setAnimatedMsgs(prev => new Set(prev).add(msg.timestamp))}
+                        />
                       )}
 
                       {/* Latency badge */}

@@ -1,7 +1,7 @@
 {
-  "name": "desktop_llm_chat",
+  "name": "localhost-ai",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "main": "main.cjs",
   "scripts": {

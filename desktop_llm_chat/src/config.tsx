@@ -18,21 +18,21 @@ export const MODE_CONFIG: Record<InferenceMode, {
   instruction: string;
 }> = {
   Quick: {
-    tokens: 128,
+    tokens: 512,
     temperature: 0.7,
     icon: React.createElement(Zap, { size: 16 }),
     description: 'Fast, concise answers',
     instruction: 'Give a short, direct, concise answer.',
   },
   Reasoning: {
-    tokens: 384,
+    tokens: 1024,
     temperature: 0.5,
     icon: React.createElement(Brain, { size: 16 }),
     description: 'Step-by-step logic',
     instruction: 'Think step by step and explain your reasoning clearly.',
   },
   Writing: {
-    tokens: 512,
+    tokens: 2048,
     temperature: 0.7,
     icon: React.createElement(Pen, { size: 16 }),
     description: 'Long-form, structured',
@@ -47,25 +47,24 @@ export function buildPrompt(
   memoryText: string
 ): string {
   const config = MODE_CONFIG[mode];
-  return `You are a fully offline personal AI assistant running locally.
 
-Mode: ${mode}
-Instruction: ${config.instruction}
+  const memoryBlock = memoryEnabled && memoryText && memoryText !== 'Memory disabled or empty.'
+    ? `\nPrevious conversation context (for reference only — do NOT copy or repeat these):\n${memoryText}\n`
+    : '';
 
-Rules:
-- Respond ONLY once
-- Do NOT ask questions
-- Do NOT include role labels
-- Use Markdown only if useful
+  return `<|begin_of_text|><|start_header_id|>system<|end_header_id|>
 
-Memory Status: ${memoryEnabled ? 'ENABLED' : 'DISABLED'}
+You are a helpful offline AI assistant. ${config.instruction}
 
-Private Memory:
-${memoryText}
+Critical rules:
+- Give ONE fresh, original response to the user's latest message
+- NEVER repeat or copy a previous response, even if the user asks the same question again
+- NEVER include role labels like "User:" or "Assistant:" in your output
+- If the user says "continue", expand on the last topic with NEW information
+- Use Markdown formatting when helpful${memoryBlock}
+<|eot_id|><|start_header_id|>user<|end_header_id|>
 
-User Query:
-${userInput}
+${userInput}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
 
-A:
 `;
 }

@@ -7,15 +7,10 @@
 *.swp
 .DS_Store
 .atom/
-.build/
-.buildlog/
 .history
-.svn/
-.swiftpm/
-migrate_working_dir/
 
 # ===============================
-# IntelliJ / IDE
+# IDE / Editor
 # ===============================
 *.iml
 *.ipr
@@ -24,56 +19,13 @@ migrate_working_dir/
 .vscode/
 
 # ===============================
-# Flutter / Dart / Pub
+# Environment & Secrets
 # ===============================
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-
-# ===============================
-# Windows Flutter
-# ===============================
-windows/flutter/ephemeral/
-
-# ===============================
-# Android build artifacts
-# ===============================
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-# ===============================
-# Symbolication
-# ===============================
-app.*.symbols
-
-# ===============================
-# Obfuscation
-# ===============================
-app.*.map.json
-
-# ===============================
-# Local Project Files (IMPORTANT)
-# ===============================
-
-# Persistent local memory
-memory.json
-
-# Local config files
 .env
 .env.*
 
-# Logs
-*.log
-
 # ===============================
-# AI Models (VERY IMPORTANT)
+# AI Models (DO NOT COMMIT)
 # ===============================
 *.gguf
 *.bin
@@ -90,15 +42,7 @@ memory.json
 *.dylib
 
 # ===============================
-# llama.cpp / whisper build folders
-# ===============================
-models/
-llama.cpp/
-whisper.cpp/
-build/
-
-# ===============================
-# Web / Electron Projects (React)
+# Web / Electron / Node.js
 # ===============================
 node_modules/
 dist/
@@ -106,3 +50,8 @@ dist-electron/
 out/
 .vite/
 .eslintcache
+
+# ===============================
+# Local Data
+# ===============================
+memory.json

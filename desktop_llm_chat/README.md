@@ -1,51 +1,61 @@
-# 💻 LocalHost-AI Desktop Workspace
+# 💻 LocalHost-AI Desktop Client
 
-A premium, fully offline, privacy-first AI desktop chat client powered by **React 19**, **Vite 8**, **Tailwind CSS v4**, and **Electron 42**.
+The premium desktop frontend for **LocalHost-AI** — built with **React 19**, **Vite 8**, **Tailwind CSS v4**, and **Electron 42**.
 
-This workspace is designed to connect directly with your local inference server (e.g., `llama.cpp` or Ollama running on `127.0.0.1:8080`) to provide high-performance generative UI and real-time streaming with zero data ever leaving your machine.
+Connects to your local llama.cpp server at `127.0.0.1:8080` for fully offline, privacy-first AI chat.
 
 ---
 
 ## ✨ Features
 
-- 🔋 **Three Optimized Inference Modes:**
-  - **Quick:** Highly optimized for brief, snappy completions (128 max tokens, temp 0.7)
-  - **Reasoning:** Enforces step-by-step logical planning (384 max tokens, temp 0.5)
-  - **Writing:** Perfect for structured long-form drafts and Markdown (512 max tokens, temp 0.7)
-- 📝 **Markdown rendering & Code Syntax Highlight:** Beautifully renders markdown structure, lists, mathematical notation, and highlighted code blocks using the **Prism OneDark** theme.
-- 💾 **Context Memory Integration:** Remembers your chat session context and automatically appends relevant session context history (backed by `localStorage` persistence).
-- 📤 **Premium Chat Export:** Export the current active session in one click as a beautifully formatted Markdown (`.md`) file including metadata such as mode settings, generation time, and char length.
-- 📦 **100% Offline SVG Rendering:** Uses direct vector SVG paths via `lucide-react`. No fonts, Material Icons, or external files are ever downloaded or needed, meaning zero square-box rendering glitches.
+- **Three Inference Modes:**
+  - ⚡ **Quick** — Concise answers (512 tokens, temp 0.7)
+  - 🧠 **Reasoning** — Step-by-step logic (1024 tokens, temp 0.5)
+  - ✍️ **Writing** — Long-form Markdown output (2048 tokens, temp 0.7)
+- **Typewriter Animation** — Responses type out with a blinking cursor; click to skip
+- **Streaming & Instant** — Toggle real-time token streaming or batch delivery
+- **Markdown + Code Highlighting** — Prism OneDark syntax theme
+- **Context Memory** — Persistent conversation history via `localStorage`
+- **Smart Anti-Repetition** — Llama-3 native chat template with deduplication rules
+- **Chat Export** — Download sessions as `.md` files with metadata
+- **100% Offline SVG Icons** — Lucide React icons, zero external font downloads
 
 ---
 
-## 🛠️ Development & Commands
+## 🛠 Commands
 
-### 1. Install Dependencies
 ```bash
+# Install dependencies
 npm install
-```
 
-### 2. Start the Development Server
-Launches the hot-reloading Vite dev compiler and the Electron frame concurrently:
-```bash
+# Development (Vite + Electron)
 npm run dev
-```
 
-### 3. Build Static Assets
-```bash
+# Production build
 npm run build
-```
 
-### 4. Build Standalone Portable Executable (.exe)
-Compiles static components and packages the application into a single-file, zero-installer portable executable file:
-```bash
+# Package as portable .exe
 npm run dist
 ```
-The output executable will be placed inside the `dist-electron/` directory. You can distribute this `.exe` file to run the app offline on any Windows machine without needing Node.js or a terminal!
 
 ---
 
-## 🛡️ Privacy & Compliance
-- **Zero Telemetry:** The app operates on pure local sandboxed networks.
-- **Direct Connect:** API calls are routed entirely locally to `127.0.0.1`.
+## 📂 Source Structure
+
+```
+src/
+├── main.tsx                 # React entry point
+├── App.tsx                  # Main chat UI, LLM connection, state management
+├── config.tsx               # Inference modes, Llama-3 prompt builder
+├── memory.ts                # localStorage persistence with smart truncation
+├── TypewriterContent.tsx    # Typewriter animation with Markdown rendering
+└── index.css                # Tailwind v4 theme (Matte Black + Inference Green)
+```
+
+---
+
+## 🛡 Privacy
+
+- **Zero Telemetry** — No analytics, no tracking, no external calls
+- **Localhost Only** — All API traffic routed to `127.0.0.1`
+- **Your Data, Your Machine** — Nothing ever leaves your hardware

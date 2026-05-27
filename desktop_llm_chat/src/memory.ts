@@ -1,4 +1,5 @@
 const MEMORY_KEY = 'localhost_ai_memory';
+const MAX_ENTRY_LENGTH = 200; // Truncate long entries to save context tokens
 
 export const MemoryService = {
   load(): { role: string; content: string }[] {
@@ -15,7 +16,15 @@ export const MemoryService = {
 
   addMessage(role: string, content: string) {
     const memory = this.load();
-    memory.push({ role, content });
+    // Store a summary for assistant messages to avoid flooding context with code blocks
+    const stored = role === 'assistant' && content.length > MAX_ENTRY_LENGTH
+      ? content.substring(0, MAX_ENTRY_LENGTH) + '... [truncated]'
+      : content;
+    memory.push({ role, content: stored });
+    // Keep only the last 20 entries max
+    if (memory.length > 20) {
+      memory.splice(0, memory.length - 20);
+    }
     this.save(memory);
   },
 
