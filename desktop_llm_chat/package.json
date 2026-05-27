@@ -57,10 +57,13 @@
     "files": [
       "dist/**/*",
       "main.cjs",
+      "build/icon.ico",
+      "build/icon.png",
       "package.json"
     ],
     "win": {
-      "target": "portable"
+      "target": "portable",
+      "icon": "build/icon.ico"
     }
   }
 }

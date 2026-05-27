@@ -15,7 +15,7 @@
     background-color: var(--color-background);
     color: white;
     font-family: var(--font-sans);
-    overflow: hidden;
+    overflow: auto;
   }
 }
 

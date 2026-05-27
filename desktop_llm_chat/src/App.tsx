@@ -8,10 +8,12 @@ import {
 
 import { MemoryService } from './memory';
 import TypewriterContent from './TypewriterContent';
+import LandingPage from './LandingPage';
 import { MODE_CONFIG, buildPrompt } from './config';
 import type { InferenceMode, Message } from './config';
 
 function App() {
+  const [onboarded, setOnboarded] = useState(() => localStorage.getItem('lhai_onboarded') === 'true');
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,6 +36,9 @@ function App() {
   }, [messages, loading]);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
+
+  // ── LANDING PAGE GUARD ──
+  if (!onboarded) return <LandingPage onEnter={() => { localStorage.setItem('lhai_onboarded', 'true'); setOnboarded(true); }} />;
 
   // ── SEND ──
   const sendPrompt = useCallback(async () => {
