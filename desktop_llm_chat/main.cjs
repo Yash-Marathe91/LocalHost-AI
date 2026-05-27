@@ -1,75 +1,142 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 
 let mainWindow;
 let llamaProcess = null;
+let serverStatus = 'stopped'; // 'running' | 'stopped' | 'error' | 'not_found'
+let lastError = '';
 
 // ── LLM SERVER CONFIG ──
-const LLAMA_DIR = 'C:\\testLlama\\llama.cpp';
-const LLAMA_EXE = path.join(LLAMA_DIR, 'build', 'bin', 'Release', 'llama-server.exe');
-const MODEL_PATH = path.join(LLAMA_DIR, 'models', 'Meta-Llama-3-8B-Instruct-Q4_K_M.gguf');
-const LLAMA_PORT = 8080;
+const CONFIG_FILE = path.join(app.getPath('userData'), 'llama_config.json');
+
+let llamaConfig = {
+  llamaDir: 'C:\\testLlama\\llama.cpp',
+  llamaExe: 'C:\\testLlama\\llama.cpp\\build\\bin\\Release\\llama-server.exe',
+  modelPath: 'C:\\testLlama\\llama.cpp\\models\\Meta-Llama-3-8B-Instruct-Q4_K_M.gguf',
+  gpuLayers: 0,
+  port: 8080
+};
+
+// Load dynamic llama configuration
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const data = fs.readFileSync(CONFIG_FILE, 'utf8');
+      llamaConfig = { ...llamaConfig, ...JSON.parse(data) };
+      console.log('[Config] Loaded config:', llamaConfig);
+    } else {
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(llamaConfig, null, 2), 'utf8');
+      console.log('[Config] Saved default config.');
+    }
+  } catch (err) {
+    console.error('[Config] Failed to load config:', err);
+  }
+}
 
 function startLlamaServer() {
-  // Check if the llama-server executable exists
-  if (!fs.existsSync(LLAMA_EXE)) {
-    console.log('[LLM] llama-server not found at:', LLAMA_EXE);
-    console.log('[LLM] Skipping auto-start. Please start the server manually.');
+  stopLlamaServer();
+  loadConfig();
+
+  const { llamaExe, modelPath, llamaDir, port, gpuLayers } = llamaConfig;
+
+  // Validate llama-server executable path
+  if (!fs.existsSync(llamaExe)) {
+    console.log('[LLM] llama-server not found at:', llamaExe);
+    serverStatus = 'not_found';
+    lastError = `llama-server.exe not found at:\n${llamaExe}`;
+    if (mainWindow) mainWindow.webContents.send('llama-status-change', { status: serverStatus, error: lastError });
     return;
   }
 
-  if (!fs.existsSync(MODEL_PATH)) {
-    console.log('[LLM] Model not found at:', MODEL_PATH);
+  // Validate model weight file path
+  if (!fs.existsSync(modelPath)) {
+    console.log('[LLM] Model not found at:', modelPath);
+    serverStatus = 'not_found';
+    lastError = `GGUF Model weights file not found at:\n${modelPath}`;
+    if (mainWindow) mainWindow.webContents.send('llama-status-change', { status: serverStatus, error: lastError });
     return;
   }
 
   console.log('[LLM] Starting llama-server...');
-  
-  llamaProcess = spawn(LLAMA_EXE, [
-    '-m', MODEL_PATH,
-    '-ngl', '0',
+  serverStatus = 'starting';
+  lastError = '';
+
+  const args = [
+    '-m', modelPath,
+    '-ngl', String(gpuLayers ?? 0),
     '-t', '8',
     '-c', '4096',
     '--host', '127.0.0.1',
-    '--port', String(LLAMA_PORT)
-  ], {
-    cwd: LLAMA_DIR,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true  // Hide the console window
-  });
+    '--port', String(port ?? 8080)
+  ];
 
-  llamaProcess.stdout.on('data', (data) => {
-    console.log('[LLM]', data.toString().trim());
-  });
+  try {
+    llamaProcess = spawn(llamaExe, args, {
+      cwd: llamaDir || path.dirname(llamaExe),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true  // Hide console popup on windows
+    });
 
-  llamaProcess.stderr.on('data', (data) => {
-    console.log('[LLM ERR]', data.toString().trim());
-  });
+    serverStatus = 'running';
 
-  llamaProcess.on('error', (err) => {
-    console.error('[LLM] Failed to start:', err.message);
-    llamaProcess = null;
-  });
+    llamaProcess.stdout.on('data', (data) => {
+      console.log('[LLM]', data.toString().trim());
+    });
 
-  llamaProcess.on('exit', (code) => {
-    console.log('[LLM] Server exited with code:', code);
-    llamaProcess = null;
-  });
+    llamaProcess.stderr.on('data', (data) => {
+      const text = data.toString().trim();
+      console.log('[LLM ERR]', text);
+      if (text.toLowerCase().includes('error') || text.toLowerCase().includes('failed')) {
+        lastError = text.substring(0, 200);
+      }
+    });
+
+    llamaProcess.on('error', (err) => {
+      console.error('[LLM] Failed to start:', err.message);
+      serverStatus = 'error';
+      lastError = err.message;
+      llamaProcess = null;
+      if (mainWindow) mainWindow.webContents.send('llama-status-change', { status: serverStatus, error: lastError });
+    });
+
+    llamaProcess.on('exit', (code) => {
+      console.log('[LLM] Server exited with code:', code);
+      serverStatus = 'stopped';
+      if (code !== 0 && code !== null) {
+        serverStatus = 'error';
+        lastError = `Llama-server exited with code ${code}`;
+      }
+      llamaProcess = null;
+      if (mainWindow) mainWindow.webContents.send('llama-status-change', { status: serverStatus, error: lastError });
+    });
+
+  } catch (err) {
+    serverStatus = 'error';
+    lastError = err.message;
+    console.error('[LLM] Spawn exception:', err);
+  }
+
+  if (mainWindow) mainWindow.webContents.send('llama-status-change', { status: serverStatus, error: lastError });
 }
 
 function stopLlamaServer() {
   if (llamaProcess) {
     console.log('[LLM] Shutting down llama-server...');
-    llamaProcess.kill('SIGTERM');
-    // Force kill after 3 seconds if it doesn't stop
+    try {
+      llamaProcess.kill('SIGTERM');
+    } catch (e) {}
+    
+    // Force kill if necessary after delay
+    const tempProcess = llamaProcess;
     setTimeout(() => {
-      if (llamaProcess) {
-        llamaProcess.kill('SIGKILL');
-        llamaProcess = null;
-      }
-    }, 3000);
+      try {
+        if (tempProcess) tempProcess.kill('SIGKILL');
+      } catch (e) {}
+    }, 2000);
+    llamaProcess = null;
+    serverStatus = 'stopped';
   }
 }
 
@@ -77,9 +144,9 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 800,
-    minHeight: 600,
-    backgroundColor: '#0A0A0A',
+    minWidth: 900,
+    minHeight: 650,
+    backgroundColor: '#090b0a',
     icon: path.join(__dirname, 'build', 'icon.ico'),
     webPreferences: {
       nodeIntegration: true,
@@ -87,25 +154,65 @@ function createWindow() {
     },
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#1A1A1A',
+      color: '#121513',
       symbolColor: '#ffffff',
       height: 40
     }
   });
 
-  // In development, load from the Vite dev server
   const isDev = process.env.NODE_ENV === 'development';
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    // mainWindow.webContents.openDevTools();
   } else {
-    // In production, load the built static files
     mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
   }
 }
 
+// ── IPC REGISTER HANDLERS ──
+ipcMain.on('get-llama-config', (event) => {
+  loadConfig();
+  event.returnValue = llamaConfig;
+});
+
+ipcMain.on('save-llama-config', (event, newConfig) => {
+  try {
+    llamaConfig = { ...llamaConfig, ...newConfig };
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(llamaConfig, null, 2), 'utf8');
+    console.log('[Config] Saved new config, restarting LLM...');
+    startLlamaServer();
+    event.returnValue = { success: true };
+  } catch (err) {
+    event.returnValue = { success: false, error: err.message };
+  }
+});
+
+ipcMain.on('get-llama-status', (event) => {
+  event.returnValue = { status: serverStatus, error: lastError };
+});
+
+ipcMain.on('restart-llama', (event) => {
+  startLlamaServer();
+  event.returnValue = { success: true };
+});
+
+ipcMain.on('select-file', (event, filters) => {
+  const paths = dialog.showOpenDialogSync(mainWindow, {
+    properties: ['openFile'],
+    filters: filters || []
+  });
+  event.returnValue = paths && paths.length > 0 ? paths[0] : null;
+});
+
+ipcMain.on('select-directory', (event) => {
+  const paths = dialog.showOpenDialogSync(mainWindow, {
+    properties: ['openDirectory']
+  });
+  event.returnValue = paths && paths.length > 0 ? paths[0] : null;
+});
+
+// App lifecycle
 app.whenReady().then(() => {
-  // Start the LLM server first, then create the window
+  loadConfig();
   startLlamaServer();
   createWindow();
 
